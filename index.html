@@ -27,7 +27,6 @@
         </select>
     </div>
 
-    <!-- 유튜브 URL 입력 칸 추가 -->
     <div class="config-row">
         <label for="youtubeUrl">유튜브 영상 URL:</label>
         <input type="text" id="youtubeUrl" placeholder="https://youtu.be/..." style="width: 300px;">
@@ -38,9 +37,10 @@
         <div class="config-row"><label>종료(구독) 이모티콘:</label> <input type="text" id="uiEndEmoteSub" disabled></div>
         <div class="config-row"><label>종료(기본) 이모티콘:</label> <input type="text" id="uiEndEmoteBasic" disabled></div>
         <hr>
-        <div class="config-row"><label>시작 조건 (명/분):</label> <input type="number" id="uiStartCond"></div>
-        <div class="config-row"><label>종료 조건 (명/분):</label> <input type="number" id="uiEndCond"></div>
-        <div class="config-row"><label>최소 쿨타임 (초):</label> <input type="number" id="uiCooldown"></div>
+        <div class="config-row"><label>시작 조건 (명/시간):</label> <input type="number" id="uiStartCond"></div>
+        <div class="config-row"><label>종료 조건 (명/시간):</label> <input type="number" id="uiEndCond"></div>
+        <div class="config-row"><label>탐지 유효 시간 (초):</label> <input type="number" id="uiWindowSec" value="60"></div>
+        <div class="config-row"><label>최소 노래 길이 (초):</label> <input type="number" id="uiCooldown"></div>
     </div>
 
     <div class="config-row">
@@ -52,9 +52,7 @@
 
     <script>
         const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSHlAmiZLtkcb8g0Dc4V17sXHuzdGAJSqGhXIHWjxbvfYJqSjk8dYMpg5xo_G7k5ybNZFu3kiq9kLl/pub?gid=0&single=true&output=csv";
-
         const GRACE_PERIOD = 30; // 교차 검증 유예 시간 (초)
-        const WINDOW_SEC = 60;   // 1분 (60초)
         let streamerDB = {};
 
         // 1. 구글 시트 연동
@@ -104,7 +102,7 @@
             }
         });
 
-// 2. 분석 실행
+        // 2. 분석 실행
         document.getElementById('processBtn').addEventListener('click', () => {
             const fileInput = document.getElementById('chatFileInput');
             if (fileInput.files.length === 0) return alert("채팅 JSON 파일을 선택해주세요.");
@@ -115,6 +113,7 @@
                 endEmoteBasic: document.getElementById('uiEndEmoteBasic').value,
                 startCond: parseInt(document.getElementById('uiStartCond').value),
                 endCond: parseInt(document.getElementById('uiEndCond').value),
+                windowSec: parseInt(document.getElementById('uiWindowSec').value) || 60, // 동적 유효 시간
                 cooldown: parseInt(document.getElementById('uiCooldown').value)
             };
 
@@ -123,12 +122,10 @@
                 try {
                     const parsedData = JSON.parse(e.target.result);
                     
-                    // 최상위가 배열이 아닌 객체로 감싸져 있는 경우 실제 채팅 배열 추출
                     let chatArray = [];
                     if (Array.isArray(parsedData)) {
                         chatArray = parsedData;
                     } else {
-                        // 객체 내부를 순회하며 배열(채팅 로그 리스트)을 찾음
                         for (let key in parsedData) {
                             if (Array.isArray(parsedData[key])) {
                                 chatArray = parsedData[key];
@@ -142,7 +139,6 @@
                         return;
                     }
 
-                    // 찾은 배열 데이터를 분석 함수로 전달
                     const songs = analyzeChat(chatArray, currentConfig);
                     displayResults(songs);
                 } catch (error) {
@@ -153,7 +149,7 @@
             reader.readAsText(fileInput.files[0]);
         });
 
-        // 3. 핵심 분석 로직 (영상 기준 상대 초(time) 활용)
+        // 3. 핵심 분석 로직
         function analyzeChat(chatData, config) {
             let state = 'IDLE'; 
             let currentSongStart = null;
@@ -163,17 +159,15 @@
             let recentEnds = [];   
 
             chatData.forEach(msg => {
-                // 영상 상대 시간(time)을 밀리초(time)에서 초 단위로 변환 (예: 24506ms -> 24.5초)
                 const timeSec = Math.floor((msg.time || 0) / 1000);
                 const text = msg.message || ""; 
 
                 if (!text) return;
 
-                // 60초가 지난 타임스탬프 필터링
-                recentStarts = recentStarts.filter(t => timeSec - t <= WINDOW_SEC);
-                recentEnds = recentEnds.filter(t => timeSec - t <= WINDOW_SEC);
+                // 유저가 설정한 탐지 유효 시간(windowSec)을 기준으로 필터링
+                recentStarts = recentStarts.filter(t => timeSec - t <= config.windowSec);
+                recentEnds = recentEnds.filter(t => timeSec - t <= config.windowSec);
 
-                // 핵심 1: 한 채팅 메시지당 무조건 1회만 추가 (도배 방지)
                 if (text.includes(config.startEmote)) recentStarts.push(timeSec);
                 if (text.includes(config.endEmoteSub) || text.includes(config.endEmoteBasic)) recentEnds.push(timeSec);
 
@@ -213,7 +207,7 @@
             return songs;
         }
 
-        // 초(sec)를 00:00:00 타임스탬프 문자열로 변환하는 함수
+        // 4. 결과 출력 포맷팅
         function formatTime(seconds) {
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
@@ -223,16 +217,13 @@
             return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
         }
 
-        // 유튜브 링크 전처리 함수
         function getYoutubeUrlWithTime(baseUrl, seconds) {
             if (!baseUrl) return null;
             let cleanUrl = baseUrl.trim();
-            // 이미 파라미터가 포함되어 있는지 체크
             const separator = cleanUrl.includes('?') ? '&' : '?';
             return `${cleanUrl}${separator}t=${seconds}s`;
         }
 
-        // 4. 결과 출력 및 클릭 기능
         function displayResults(songs) {
             const resultArea = document.getElementById('resultArea');
             const ytUrl = document.getElementById('youtubeUrl').value;
@@ -254,13 +245,11 @@
                 const div = document.createElement('div');
                 div.className = 'timestamp-item';
 
-                // 유튜브 URL이 입력되어 있으면 이동 가능한 링크로 출력
                 if (ytUrl) {
                     div.innerHTML = `${String(i + 1).padStart(2, '0')}. 
                         <a class="timestamp-link" href="${startLink}" target="_blank">${startTimeText}</a> ~ 
                         <a class="timestamp-link" href="${endLink}" target="_blank">${endTimeText}</a>`;
                 } else {
-                    // URL이 없으면 일반 텍스트 타임스탬프로 출력
                     div.innerHTML = `${String(i + 1).padStart(2, '0')}. ${startTimeText} ~ ${endTimeText}`;
                 }
 
