@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>치지직 노래 타임스탬프 추출기</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 650px; }
+        .config-box { border: 1px solid #ccc; padding: 15px; margin: 15px 0; border-radius: 8px; background: #f9f9f9; }
+        .config-row { margin-bottom: 10px; }
+        label { display: inline-block; width: 160px; font-weight: bold; }
+        input[type="number"], input[type="text"] { width: 140px; padding: 4px; }
+        select { padding: 5px; width: 150px; }
+        button { padding: 10px 20px; font-weight: bold; cursor: pointer; }
+        #resultArea { margin-top: 20px; background: #222; color: #fff; padding: 15px; border-radius: 8px; min-height: 100px; }
+        .timestamp-item { margin-bottom: 8px; font-size: 15px; }
+        .timestamp-link { color: #57abff; text-decoration: underline; cursor: pointer; font-weight: bold; }
+        .timestamp-link:hover { color: #9bcbfd; }
+    </style>
+</head>
+<body>
+    <h2>🎵 치지직 노래 타임스탬프 추출기</h2>
+    
+    <div class="config-row">
+        <label for="streamerSelect">스트리머 선택:</label>
+        <select id="streamerSelect">
+            <option value="">시트 불러오는 중...</option>
+        </select>
+    </div>
+
+    <!-- 유튜브 URL 입력 칸 추가 -->
+    <div class="config-row">
+        <label for="youtubeUrl">유튜브 영상 URL:</label>
+        <input type="text" id="youtubeUrl" placeholder="https://youtu.be/..." style="width: 300px;">
+    </div>
+
+    <div class="config-box">
+        <div class="config-row"><label>시작 이모티콘:</label> <input type="text" id="uiStartEmote" disabled></div>
+        <div class="config-row"><label>종료(구독) 이모티콘:</label> <input type="text" id="uiEndEmoteSub" disabled></div>
+        <div class="config-row"><label>종료(기본) 이모티콘:</label> <input type="text" id="uiEndEmoteBasic" disabled></div>
+        <hr>
+        <div class="config-row"><label>시작 조건 (명/분):</label> <input type="number" id="uiStartCond"></div>
+        <div class="config-row"><label>종료 조건 (명/분):</label> <input type="number" id="uiEndCond"></div>
+        <div class="config-row"><label>최소 쿨타임 (초):</label> <input type="number" id="uiCooldown"></div>
+    </div>
+
+    <div class="config-row">
+        <input type="file" id="chatFileInput" accept=".json">
+        <button id="processBtn">분석 시작</button>
+    </div>
+
+    <div id="resultArea">스프레드시트를 연동하고 JSON 파일을 업로드하세요.</div>
+
+    <script>
+        const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSHlAmiZLtkcb8g0Dc4V17sXHuzdGAJSqGhXIHWjxbvfYJqSjk8dYMpg5xo_G7k5ybNZFu3kiq9kLl/pub?gid=0&single=true&output=csv";
+
+        const GRACE_PERIOD = 30; // 교차 검증 유예 시간 (초)
+        const WINDOW_SEC = 60;   // 1분 (60초)
+        let streamerDB = {};
+
+        // 1. 구글 시트 연동
+        async function loadSheetData() {
+            try {
+                const response = await fetch(SHEET_CSV_URL);
+                const csvText = await response.text();
+                const rows = csvText.split('\n');
+                const selectEl = document.getElementById('streamerSelect');
+                selectEl.innerHTML = '';
+                
+                for(let i = 1; i < rows.length; i++) {
+                    const cols = rows[i].split(',').map(col => col.trim());
+                    if(cols.length >= 7 && cols[0] !== "") {
+                        const name = cols[0];
+                        streamerDB[name] = {
+                            startEmote: cols[1],
+                            endEmoteSub: cols[2],
+                            endEmoteBasic: cols[3],
+                            startCond: parseInt(cols[4]) || 2,
+                            endCond: parseInt(cols[5]) || 2,
+                            cooldown: parseInt(cols[6]) || 30
+                        };
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = name;
+                        selectEl.appendChild(option);
+                    }
+                }
+                if(Object.keys(streamerDB).length > 0) selectEl.dispatchEvent(new Event('change'));
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        window.onload = loadSheetData;
+
+        document.getElementById('streamerSelect').addEventListener('change', (e) => {
+            const data = streamerDB[e.target.value];
+            if(data) {
+                document.getElementById('uiStartEmote').value = data.startEmote;
+                document.getElementById('uiEndEmoteSub').value = data.endEmoteSub;
+                document.getElementById('uiEndEmoteBasic').value = data.endEmoteBasic;
+                document.getElementById('uiStartCond').value = data.startCond;
+                document.getElementById('uiEndCond').value = data.endCond;
+                document.getElementById('uiCooldown').value = data.cooldown;
+            }
+        });
+
+        // 2. 분석 실행
+        document.getElementById('processBtn').addEventListener('click', () => {
+            const fileInput = document.getElementById('chatFileInput');
+            if (fileInput.files.length === 0) return alert("채팅 JSON 파일을 선택해주세요.");
+
+            const currentConfig = {
+                startEmote: document.getElementById('uiStartEmote').value,
+                endEmoteSub: document.getElementById('uiEndEmoteSub').value,
+                endEmoteBasic: document.getElementById('uiEndEmoteBasic').value,
+                startCond: parseInt(document.getElementById('uiStartCond').value),
+                endCond: parseInt(document.getElementById('uiEndCond').value),
+                cooldown: parseInt(document.getElementById('uiCooldown').value)
+            };
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const chatData = JSON.parse(e.target.result);
+                    const songs = analyzeChat(chatData, currentConfig);
+                    displayResults(songs);
+                } catch (error) {
+                    alert("JSON 파싱 에러! 파일 형식을 확인해주세요.");
+                }
+            };
+            reader.readAsText(fileInput.files[0]);
+        });
+
+        // 3. 핵심 분석 로직 (영상 기준 상대 초(time) 활용)
+        function analyzeChat(chatData, config) {
+            let state = 'IDLE'; 
+            let currentSongStart = null;
+            let potentialEndTime = null;
+            let songs = [];
+            let recentStarts = []; 
+            let recentEnds = [];   
+
+            chatData.forEach(msg => {
+                // 영상 상대 시간(time)을 밀리초(time)에서 초 단위로 변환 (예: 24506ms -> 24.5초)
+                const timeSec = Math.floor((msg.time || 0) / 1000);
+                const text = msg.message || ""; 
+
+                if (!text) return;
+
+                // 60초가 지난 타임스탬프 필터링
+                recentStarts = recentStarts.filter(t => timeSec - t <= WINDOW_SEC);
+                recentEnds = recentEnds.filter(t => timeSec - t <= WINDOW_SEC);
+
+                // 핵심 1: 한 채팅 메시지당 무조건 1회만 추가 (도배 방지)
+                if (text.includes(config.startEmote)) recentStarts.push(timeSec);
+                if (text.includes(config.endEmoteSub) || text.includes(config.endEmoteBasic)) recentEnds.push(timeSec);
+
+                if (state === 'IDLE') {
+                    if (recentStarts.length >= config.startCond) {
+                        state = 'SINGING';
+                        currentSongStart = timeSec;
+                        recentStarts = []; 
+                    }
+                } 
+                else if (state === 'SINGING') {
+                    if (recentEnds.length >= config.endCond) {
+                        const durationSec = timeSec - currentSongStart;
+                        if (durationSec >= config.cooldown) { 
+                            state = 'END_PENDING';
+                            potentialEndTime = timeSec;
+                            recentEnds = [];
+                        }
+                    }
+                } 
+                else if (state === 'END_PENDING') {
+                    const diffSec = timeSec - potentialEndTime;
+                    if (recentStarts.length >= config.startCond && diffSec <= GRACE_PERIOD) {
+                        songs.push({ start: currentSongStart, end: potentialEndTime });
+                        currentSongStart = timeSec; 
+                        state = 'SINGING';
+                        recentStarts = [];
+                    } 
+                    else if (diffSec > GRACE_PERIOD) {
+                        songs.push({ start: currentSongStart, end: potentialEndTime });
+                        state = 'IDLE';
+                    }
+                }
+            });
+
+            if (state === 'END_PENDING') songs.push({ start: currentSongStart, end: potentialEndTime });
+            return songs;
+        }
+
+        // 초(sec)를 00:00:00 타임스탬프 문자열로 변환하는 함수
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            
+            const pad = num => String(num).padStart(2, '0');
+            return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+        }
+
+        // 유튜브 링크 전처리 함수
+        function getYoutubeUrlWithTime(baseUrl, seconds) {
+            if (!baseUrl) return null;
+            let cleanUrl = baseUrl.trim();
+            // 이미 파라미터가 포함되어 있는지 체크
+            const separator = cleanUrl.includes('?') ? '&' : '?';
+            return `${cleanUrl}${separator}t=${seconds}s`;
+        }
+
+        // 4. 결과 출력 및 클릭 기능
+        function displayResults(songs) {
+            const resultArea = document.getElementById('resultArea');
+            const ytUrl = document.getElementById('youtubeUrl').value;
+
+            if (songs.length === 0) {
+                resultArea.innerText = "조건에 맞는 노래 구간이 검출되지 않았습니다.";
+                return;
+            }
+
+            resultArea.innerHTML = "✅ **노래 타임스탬프 검출 완료**<br><br>";
+
+            songs.forEach((song, i) => {
+                const startTimeText = formatTime(song.start);
+                const endTimeText = formatTime(song.end);
+                
+                const startLink = getYoutubeUrlWithTime(ytUrl, song.start);
+                const endLink = getYoutubeUrlWithTime(ytUrl, song.end);
+
+                const div = document.createElement('div');
+                div.className = 'timestamp-item';
+
+                // 유튜브 URL이 입력되어 있으면 이동 가능한 링크로 출력
+                if (ytUrl) {
+                    div.innerHTML = `${String(i + 1).padStart(2, '0')}. 
+                        <a class="timestamp-link" href="${startLink}" target="_blank">${startTimeText}</a> ~ 
+                        <a class="timestamp-link" href="${endLink}" target="_blank">${endTimeText}</a>`;
+                } else {
+                    // URL이 없으면 일반 텍스트 타임스탬프로 출력
+                    div.innerHTML = `${String(i + 1).padStart(2, '0')}. ${startTimeText} ~ ${endTimeText}`;
+                }
+
+                resultArea.appendChild(div);
+            });
+        }
+    </script>
+</body>
+</html>
