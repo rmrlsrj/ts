@@ -104,7 +104,7 @@
             }
         });
 
-        // 2. 분석 실행
+// 2. 분석 실행
         document.getElementById('processBtn').addEventListener('click', () => {
             const fileInput = document.getElementById('chatFileInput');
             if (fileInput.files.length === 0) return alert("채팅 JSON 파일을 선택해주세요.");
@@ -121,11 +121,33 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    const chatData = JSON.parse(e.target.result);
-                    const songs = analyzeChat(chatData, currentConfig);
+                    const parsedData = JSON.parse(e.target.result);
+                    
+                    // 최상위가 배열이 아닌 객체로 감싸져 있는 경우 실제 채팅 배열 추출
+                    let chatArray = [];
+                    if (Array.isArray(parsedData)) {
+                        chatArray = parsedData;
+                    } else {
+                        // 객체 내부를 순회하며 배열(채팅 로그 리스트)을 찾음
+                        for (let key in parsedData) {
+                            if (Array.isArray(parsedData[key])) {
+                                chatArray = parsedData[key];
+                                break;
+                            }
+                        }
+                    }
+
+                    if (chatArray.length === 0) {
+                        alert("채팅 배열 데이터를 찾을 수 없습니다. 파일 형식을 다시 확인해주세요.");
+                        return;
+                    }
+
+                    // 찾은 배열 데이터를 분석 함수로 전달
+                    const songs = analyzeChat(chatArray, currentConfig);
                     displayResults(songs);
                 } catch (error) {
-                    alert("JSON 파싱 에러! 파일 형식을 확인해주세요.");
+                    console.error(error);
+                    alert("처리 중 에러 발생: " + error.message);
                 }
             };
             reader.readAsText(fileInput.files[0]);
