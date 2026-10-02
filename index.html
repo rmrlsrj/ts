@@ -15,7 +15,7 @@
         /* 우측 영상 패널 영역 */
         .right-panel { flex: 1.3; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 20px; }
         
-        /* 개별 비디오 래퍼 (최대 높이 390px로 수정됨) */
+        /* 개별 비디오 래퍼 (최대 높이 390px) */
         .video-box { width: 100%; display: flex; flex-direction: column; gap: 4px; }
         .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 390px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         iframe { width: 100%; height: 100%; border: none; }
@@ -35,12 +35,13 @@
         button { padding: 10px 20px; font-weight: bold; cursor: pointer; }
         #resultArea { margin-top: 20px; background: #222; color: #fff; padding: 15px; border-radius: 8px; min-height: 100px; max-height: 650px; overflow-y: auto; }
         
-        /* 타임스탬프 결과 아이템 스타일 (드래그 앤 드롭 추가) */
-        .timestamp-item { margin-bottom: 15px; background: #333; padding: 12px; border-radius: 6px; position: relative; cursor: grab; transition: opacity 0.2s; }
-        .timestamp-item:active { cursor: grabbing; }
+        /* 타임스탬프 결과 아이템 스타일 (전체 드래그 해제) */
+        .timestamp-item { margin-bottom: 15px; background: #333; padding: 12px; border-radius: 6px; position: relative; transition: opacity 0.2s; }
         .timestamp-item.dragging { opacity: 0.5; border: 2px dashed #57abff; }
         
-        .drag-handle { cursor: grab; color: #888; font-size: 18px; margin-right: 5px; user-select: none; }
+        /* 드래그 핸들 (≡ 모양) 전용 스타일 */
+        .drag-handle { cursor: grab; color: #888; font-size: 18px; margin-right: 5px; user-select: none; padding: 0 5px; }
+        .drag-handle:active { cursor: grabbing; color: #57abff; }
         
         /* 수정 가능한 타임스탬프 입력 상자 스타일 */
         .time-input { width: 75px !important; background: #222 !important; border: 1px solid #57abff !important; color: #57abff !important; font-weight: bold; text-align: center; border-radius: 4px; padding: 3px; }
@@ -371,7 +372,7 @@
             const listContainer = document.getElementById('songListContainer');
             if (!listContainer) return;
             
-            const div = createSongElement("0:00", "0:00", 999); // 인덱스는 곧 업데이트됨
+            const div = createSongElement("0:00", "0:00", 999); 
             listContainer.appendChild(div);
             
             document.getElementById('copyBtn').style.display = 'block';
@@ -384,10 +385,9 @@
         function createSongElement(startTimeText, endTimeText, index) {
             const div = document.createElement('div');
             div.className = 'timestamp-item';
-            div.setAttribute('draggable', 'true');
             div.setAttribute('id', `song-item-${index}`);
 
-            // 드래그 이벤트 연결
+            // 드래그 이벤트 (div 전체가 아닌 핸들 조작 시에만 활성화)
             div.addEventListener('dragstart', handleDragStart);
             div.addEventListener('dragover', handleDragOver);
             div.addEventListener('drop', handleDrop);
@@ -405,16 +405,22 @@
             div.innerHTML = `
                 ${deleteBtn}
                 <div style="margin-bottom: 8px;">
-                    <span class="drag-handle">≡</span> 
+                    <span class="drag-handle" title="드래그하여 순서 변경">≡</span> 
                     <span class="song-num-label">${String(index + 1).padStart(2, '0')}.</span> 
                     ${timeHtml}
                 </div>
-                <!-- 곡명, 가수명 순서로 변경됨 -->
                 <div class="input-group">
                     <label>곡명:</label> <input type="text" class="input-song">
                     <label>가수:</label> <input type="text" class="input-singer">
                 </div>
             `;
+            
+            // ≡ 핸들에만 마우스 이벤트를 할당하여, 누르고 있을 때만 부모 div를 드래그 가능하게 만듭니다.
+            const dragHandle = div.querySelector('.drag-handle');
+            dragHandle.addEventListener('mousedown', () => div.setAttribute('draggable', 'true'));
+            dragHandle.addEventListener('mouseup', () => div.setAttribute('draggable', 'false'));
+            dragHandle.addEventListener('mouseleave', () => div.setAttribute('draggable', 'false'));
+
             return div;
         }
 
@@ -473,6 +479,7 @@
 
         function handleDragEnd(e) {
             this.classList.remove('dragging');
+            this.setAttribute('draggable', 'false'); // 드래그 종료 시 다시 드래그 비활성화
             dragSrcEl = null;
             updateSongNumbers(); // 드래그 완료 시 순서 자동 갱신
         }
@@ -544,7 +551,6 @@
             playVideoEnd(sec, timeStr);
         }
 
-        // 복사 순서: 곡명 - 가수명
         document.getElementById('copyBtn').addEventListener('click', () => {
             const items = document.querySelectorAll('.timestamp-item');
             let resultText = "";
