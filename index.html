@@ -15,9 +15,9 @@
         /* 우측 영상 패널 영역 */
         .right-panel { flex: 1.3; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 20px; }
         
-        /* 개별 비디오 래퍼 */
+        /* 개별 비디오 래퍼 (최대 높이 390px로 수정됨) */
         .video-box { width: 100%; display: flex; flex-direction: column; gap: 4px; }
-        .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 310px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 390px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         iframe { width: 100%; height: 100%; border: none; }
         .video-label { font-weight: bold; font-size: 14px; background: #eee; padding: 5px 10px; border-radius: 6px; }
         
@@ -409,9 +409,10 @@
                     <span class="song-num-label">${String(index + 1).padStart(2, '0')}.</span> 
                     ${timeHtml}
                 </div>
+                <!-- 곡명, 가수명 순서로 변경됨 -->
                 <div class="input-group">
-                    <label>가수:</label> <input type="text" class="input-singer">
                     <label>곡명:</label> <input type="text" class="input-song">
+                    <label>가수:</label> <input type="text" class="input-singer">
                 </div>
             `;
             return div;
@@ -543,20 +544,21 @@
             playVideoEnd(sec, timeStr);
         }
 
+        // 복사 순서: 곡명 - 가수명
         document.getElementById('copyBtn').addEventListener('click', () => {
             const items = document.querySelectorAll('.timestamp-item');
             let resultText = "";
 
             items.forEach(item => {
                 const time = item.querySelector('.input-start-time').value.trim();
-                const singer = item.querySelector('.input-singer').value.trim();
                 const song = item.querySelector('.input-song').value.trim();
+                const singer = item.querySelector('.input-singer').value.trim();
                 
                 let line = time;
-                if (singer && song) {
-                    line += ` ${singer} - ${song}`;
-                } else if (singer || song) {
-                    line += ` ${singer}${song}`; 
+                if (song && singer) {
+                    line += ` ${song} - ${singer}`;
+                } else if (song || singer) {
+                    line += ` ${song}${singer}`; 
                 }
                 
                 resultText += line + "\n";
