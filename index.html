@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <title>치지직 노래 타임스탬프 추출기</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 650px; }
+        body { font-family: sans-serif; padding: 20px; max-width: 700px; }
         .config-box { border: 1px solid #ccc; padding: 15px; margin: 15px 0; border-radius: 8px; background: #f9f9f9; }
         .config-row { margin-bottom: 10px; }
-        label { display: inline-block; width: 160px; font-weight: bold; }
+        label { display: inline-block; width: 170px; font-weight: bold; }
         input[type="number"], input[type="text"] { width: 140px; padding: 4px; }
         select { padding: 5px; width: 150px; }
         button { padding: 10px 20px; font-weight: bold; cursor: pointer; }
@@ -15,6 +15,7 @@
         .timestamp-item { margin-bottom: 8px; font-size: 15px; }
         .timestamp-link { color: #57abff; text-decoration: underline; cursor: pointer; font-weight: bold; }
         .timestamp-link:hover { color: #9bcbfd; }
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     </style>
 </head>
 <body>
@@ -33,13 +34,25 @@
     </div>
 
     <div class="config-box">
-        <div class="config-row"><label>시작 이모티콘:</label> <input type="text" id="uiStartEmote" disabled></div>
-        <div class="config-row"><label>종료(구독) 이모티콘:</label> <input type="text" id="uiEndEmoteSub" disabled></div>
-        <div class="config-row"><label>종료(기본) 이모티콘:</label> <input type="text" id="uiEndEmoteBasic" disabled></div>
+        <div class="grid-container">
+            <!-- 시작 이모티콘 4종 -->
+            <div>
+                <div class="config-row"><label>시작(구독응원):</label> <input type="text" id="uiStart1" disabled></div>
+                <div class="config-row"><label>시작(기본응원):</label> <input type="text" id="uiStart2" disabled></div>
+                <div class="config-row"><label>시작(구독기타1):</label> <input type="text" id="uiStart3" disabled></div>
+                <div class="config-row"><label>시작(구독기타2):</label> <input type="text" id="uiStart4" disabled></div>
+            </div>
+            <!-- 종료 이모티콘 3종 -->
+            <div>
+                <div class="config-row"><label>종료(구독):</label> <input type="text" id="uiEnd1" disabled></div>
+                <div class="config-row"><label>종료(기본):</label> <input type="text" id="uiEnd2" disabled></div>
+                <div class="config-row"><label>종료(기타):</label> <input type="text" id="uiEnd3" disabled></div>
+            </div>
+        </div>
         <hr>
         <div class="config-row"><label>시작 조건 (명/시간):</label> <input type="number" id="uiStartCond"></div>
         <div class="config-row"><label>종료 조건 (명/시간):</label> <input type="number" id="uiEndCond"></div>
-        <div class="config-row"><label>탐지 유효 시간 (초):</label> <input type="number" id="uiWindowSec" value="60"></div>
+        <div class="config-row"><label>탐지 유효 시간 (초):</label> <input type="number" id="uiWindowSec" value="15"></div>
         <div class="config-row"><label>최소 노래 길이 (초):</label> <input type="number" id="uiCooldown"></div>
     </div>
 
@@ -51,11 +64,12 @@
     <div id="resultArea">스프레드시트를 연동하고 JSON 파일을 업로드하세요.</div>
 
     <script>
+        // 새로 작성하신 스프레드시트의 CSV 주소로 변경해주세요.
         const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSHlAmiZLtkcb8g0Dc4V17sXHuzdGAJSqGhXIHWjxbvfYJqSjk8dYMpg5xo_G7k5ybNZFu3kiq9kLl/pub?gid=0&single=true&output=csv";
         const GRACE_PERIOD = 30; // 교차 검증 유예 시간 (초)
         let streamerDB = {};
 
-        // 1. 구글 시트 연동
+        // 1. 구글 시트 연동 (확장된 열 구조 반영)
         async function loadSheetData() {
             try {
                 const response = await fetch(SHEET_CSV_URL);
@@ -66,15 +80,15 @@
                 
                 for(let i = 1; i < rows.length; i++) {
                     const cols = rows[i].split(',').map(col => col.trim());
-                    if(cols.length >= 7 && cols[0] !== "") {
+                    // 열이 11개(A~K)로 늘어났으므로 기준 확장
+                    if(cols.length >= 11 && cols[0] !== "") {
                         const name = cols[0];
                         streamerDB[name] = {
-                            startEmote: cols[1],
-                            endEmoteSub: cols[2],
-                            endEmoteBasic: cols[3],
-                            startCond: parseInt(cols[4]) || 2,
-                            endCond: parseInt(cols[5]) || 2,
-                            cooldown: parseInt(cols[6]) || 30
+                            start1: cols[1], start2: cols[2], start3: cols[3], start4: cols[4],
+                            end1: cols[5], end2: cols[6], end3: cols[7],
+                            startCond: parseInt(cols[8]) || 2,
+                            endCond: parseInt(cols[9]) || 2,
+                            cooldown: parseInt(cols[10]) || 30
                         };
                         const option = document.createElement('option');
                         option.value = name;
@@ -84,18 +98,23 @@
                 }
                 if(Object.keys(streamerDB).length > 0) selectEl.dispatchEvent(new Event('change'));
             } catch (error) {
-                console.error(error);
+                console.error("스프레드시트 로드 실패:", error);
             }
         }
 
         window.onload = loadSheetData;
 
+        // 드롭다운 변경 시 UI 업데이트
         document.getElementById('streamerSelect').addEventListener('change', (e) => {
             const data = streamerDB[e.target.value];
             if(data) {
-                document.getElementById('uiStartEmote').value = data.startEmote;
-                document.getElementById('uiEndEmoteSub').value = data.endEmoteSub;
-                document.getElementById('uiEndEmoteBasic').value = data.endEmoteBasic;
+                document.getElementById('uiStart1').value = data.start1;
+                document.getElementById('uiStart2').value = data.start2;
+                document.getElementById('uiStart3').value = data.start3;
+                document.getElementById('uiStart4').value = data.start4;
+                document.getElementById('uiEnd1').value = data.end1;
+                document.getElementById('uiEnd2').value = data.end2;
+                document.getElementById('uiEnd3').value = data.end3;
                 document.getElementById('uiStartCond').value = data.startCond;
                 document.getElementById('uiEndCond').value = data.endCond;
                 document.getElementById('uiCooldown').value = data.cooldown;
@@ -107,13 +126,15 @@
             const fileInput = document.getElementById('chatFileInput');
             if (fileInput.files.length === 0) return alert("채팅 JSON 파일을 선택해주세요.");
 
+            // 빈 칸 무시하고 설정된 이모티콘만 배열로 모음
+            const getEmotes = (ids) => ids.map(id => document.getElementById(id).value).filter(val => val.trim() !== "");
+
             const currentConfig = {
-                startEmote: document.getElementById('uiStartEmote').value,
-                endEmoteSub: document.getElementById('uiEndEmoteSub').value,
-                endEmoteBasic: document.getElementById('uiEndEmoteBasic').value,
+                startEmotes: getEmotes(['uiStart1', 'uiStart2', 'uiStart3', 'uiStart4']),
+                endEmotes: getEmotes(['uiEnd1', 'uiEnd2', 'uiEnd3']),
                 startCond: parseInt(document.getElementById('uiStartCond').value),
                 endCond: parseInt(document.getElementById('uiEndCond').value),
-                windowSec: parseInt(document.getElementById('uiWindowSec').value) || 60, // 동적 유효 시간
+                windowSec: parseInt(document.getElementById('uiWindowSec').value) || 15, 
                 cooldown: parseInt(document.getElementById('uiCooldown').value)
             };
 
@@ -121,7 +142,6 @@
             reader.onload = function(e) {
                 try {
                     const parsedData = JSON.parse(e.target.result);
-                    
                     let chatArray = [];
                     if (Array.isArray(parsedData)) {
                         chatArray = parsedData;
@@ -134,15 +154,11 @@
                         }
                     }
 
-                    if (chatArray.length === 0) {
-                        alert("채팅 배열 데이터를 찾을 수 없습니다. 파일 형식을 다시 확인해주세요.");
-                        return;
-                    }
+                    if (chatArray.length === 0) return alert("채팅 배열 데이터를 찾을 수 없습니다.");
 
                     const songs = analyzeChat(chatArray, currentConfig);
                     displayResults(songs);
                 } catch (error) {
-                    console.error(error);
                     alert("처리 중 에러 발생: " + error.message);
                 }
             };
@@ -164,12 +180,15 @@
 
                 if (!text) return;
 
-                // 유저가 설정한 탐지 유효 시간(windowSec)을 기준으로 필터링
                 recentStarts = recentStarts.filter(t => timeSec - t <= config.windowSec);
                 recentEnds = recentEnds.filter(t => timeSec - t <= config.windowSec);
 
-                if (text.includes(config.startEmote)) recentStarts.push(timeSec);
-                if (text.includes(config.endEmoteSub) || text.includes(config.endEmoteBasic)) recentEnds.push(timeSec);
+                // 여러 이모티콘 중 하나라도 포함되어 있으면 한 번만 카운트 (도배 무시, 종류 혼용 허용)
+                const hasStart = config.startEmotes.some(emote => text.includes(emote));
+                const hasEnd = config.endEmotes.some(emote => text.includes(emote));
+
+                if (hasStart) recentStarts.push(timeSec);
+                if (hasEnd) recentEnds.push(timeSec);
 
                 if (state === 'IDLE') {
                     if (recentStarts.length >= config.startCond) {
@@ -212,7 +231,6 @@
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
             const s = seconds % 60;
-            
             const pad = num => String(num).padStart(2, '0');
             return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
         }
