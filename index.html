@@ -201,15 +201,16 @@
                             }
                         }
                     }
-                    if (chatArray.length === 0) return alert("채팅 배열 데이터를 찾을 수 없습니다.");
+if (chatArray.length === 0) {
+                        alert("채팅 배열 데이터를 찾을 수 없습니다. 파일 형식을 다시 확인해주세요.");
+                        return;
+                    }
 
                     const songs = analyzeChat(chatArray, currentConfig);
                     displayResults(songs);
-                    if(document.getElementById('youtubeUrl').value) {
-                        playVideoStart(0);
-                        playVideoEnd(0);
-                    }
+                    
                 } catch (error) {
+                    console.error(error);
                     alert("처리 중 에러 발생: " + error.message);
                 }
             };
