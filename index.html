@@ -4,22 +4,22 @@
     <meta charset="UTF-8">
     <title>치지직 노래 타임스탬프 추출기</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 1800px; margin: 0 auto; }
+        body { font-family: sans-serif; padding: 20px; max-width: 1400px; margin: 0 auto; }
         
-        /* 3단 분할 레이아웃 (좌측 패널 / 중앙 영상 / 우측 영상) */
-        .main-container { display: flex; gap: 20px; align-items: flex-start; }
+        /* 전체 좌우 분할 레이아웃 */
+        .main-container { display: flex; gap: 30px; align-items: flex-start; }
         
-        /* 좌측 제어 패널 (크기 고정) */
-        .left-panel { flex: 0 0 550px; }
+        /* 좌측 제어 패널 */
+        .left-panel { flex: 1; min-width: 550px; max-width: 650px; }
         
-        /* 우측 영상 패널 영역 (플렉스로 영상 2개 가로 배치) */
-        .right-panel { flex: 1; display: flex; gap: 20px; position: sticky; top: 20px; }
+        /* 우측 영상 패널 영역 (플렉스로 영상 2개 세로 배치) */
+        .right-panel { flex: 1; display: flex; flex-direction: column; gap: 20px; position: sticky; top: 20px; }
         
         /* 개별 비디오 래퍼 */
-        .video-box { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        .video-box { width: 100%; display: flex; flex-direction: column; gap: 8px; }
         .video-wrapper { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         iframe { width: 100%; height: 100%; border: none; }
-        .video-label { text-align: center; font-weight: bold; font-size: 16px; background: #eee; padding: 8px; border-radius: 6px; }
+        .video-label { font-weight: bold; font-size: 16px; background: #eee; padding: 8px 12px; border-radius: 6px; }
         
         .config-box { border: 1px solid #ccc; padding: 15px; margin: 15px 0; border-radius: 8px; background: #f9f9f9; }
         .config-row { margin-bottom: 10px; }
@@ -92,7 +92,7 @@
             <button id="copyBtn">📋 완성된 타임스탬프 텍스트 복사하기</button>
         </div>
 
-        <!-- 우측: 듀얼 유튜브 플레이어 패널 -->
+        <!-- 우측: 듀얼 유튜브 플레이어 패널 (세로 배치) -->
         <div class="right-panel">
             <!-- 플레이어 1: 시작 지점 확인용 -->
             <div class="video-box">
@@ -166,7 +166,7 @@
             }
         });
 
-        // 듀얼 로드: 수동 버튼 클릭 시 둘 다 0초 로드
+        // 영상 수동 로드 버튼 (기본 0초 재생)
         document.getElementById('loadVideoBtn').addEventListener('click', () => { 
             playVideoStart(0); 
             playVideoEnd(0);
@@ -201,7 +201,7 @@
                             }
                         }
                     }
-if (chatArray.length === 0) {
+                    if (chatArray.length === 0) {
                         alert("채팅 배열 데이터를 찾을 수 없습니다. 파일 형식을 다시 확인해주세요.");
                         return;
                     }
@@ -209,8 +209,9 @@ if (chatArray.length === 0) {
                     const songs = analyzeChat(chatArray, currentConfig);
                     displayResults(songs);
                     
+                    // 분석 직후 유튜브 자동 재생 로직 삭제 완료
+                    
                 } catch (error) {
-                    console.error(error);
                     alert("처리 중 에러 발생: " + error.message);
                 }
             };
@@ -280,7 +281,6 @@ if (chatArray.length === 0) {
             return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
         }
 
-        // 공통 비디오 ID 추출
         function getVideoId(ytUrl) {
             if (!ytUrl) return "";
             if (ytUrl.includes("youtu.be/")) return ytUrl.split("youtu.be/")[1].split("?")[0];
@@ -288,7 +288,6 @@ if (chatArray.length === 0) {
             return "";
         }
 
-        // 중앙 플레이어 (시작) 컨트롤
         function playVideoStart(seconds) {
             const ytUrl = document.getElementById('youtubeUrl').value;
             const iframe = document.getElementById('ytPlayerStart');
@@ -298,7 +297,6 @@ if (chatArray.length === 0) {
             else alert("유효한 유튜브 주소가 아닙니다.");
         }
 
-        // 우측 플레이어 (종료) 컨트롤
         function playVideoEnd(seconds) {
             const ytUrl = document.getElementById('youtubeUrl').value;
             const iframe = document.getElementById('ytPlayerEnd');
@@ -330,7 +328,6 @@ if (chatArray.length === 0) {
 
                 let timeHtml = "";
                 if (ytUrl) {
-                    // 시작 시간 클릭 시 좌측 플레이어 구동, 종료 시간 클릭 시 우측 플레이어 구동
                     timeHtml = `<a class="timestamp-link" onclick="playVideoStart(${song.start})">${startTimeText}</a> ~ 
                                 <a class="timestamp-link" onclick="playVideoEnd(${song.end})">${endTimeText}</a>`;
                 } else {
