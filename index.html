@@ -12,12 +12,12 @@
         /* 좌측 제어 패널 */
         .left-panel { flex: 1; min-width: 600px; max-width: 700px; }
         
-        /* 우측 영상 패널 영역 (화면 밖으로 잘리지 않도록 크기 및 간격 최적화) */
+        /* 우측 영상 패널 영역 */
         .right-panel { flex: 1.3; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 20px; }
         
-        /* 개별 비디오 래퍼 (플레이어 크기 및 최대 높이 최적화) */
+        /* 개별 비디오 래퍼 */
         .video-box { width: 100%; display: flex; flex-direction: column; gap: 4px; }
-        .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 390px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 310px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         iframe { width: 100%; height: 100%; border: none; }
         .video-label { font-weight: bold; font-size: 14px; background: #eee; padding: 5px 10px; border-radius: 6px; }
         
@@ -35,8 +35,12 @@
         button { padding: 10px 20px; font-weight: bold; cursor: pointer; }
         #resultArea { margin-top: 20px; background: #222; color: #fff; padding: 15px; border-radius: 8px; min-height: 100px; max-height: 650px; overflow-y: auto; }
         
-        /* 타임스탬프 결과 아이템 스타일 */
-        .timestamp-item { margin-bottom: 15px; background: #333; padding: 12px; border-radius: 6px; position: relative; }
+        /* 타임스탬프 결과 아이템 스타일 (드래그 앤 드롭 추가) */
+        .timestamp-item { margin-bottom: 15px; background: #333; padding: 12px; border-radius: 6px; position: relative; cursor: grab; transition: opacity 0.2s; }
+        .timestamp-item:active { cursor: grabbing; }
+        .timestamp-item.dragging { opacity: 0.5; border: 2px dashed #57abff; }
+        
+        .drag-handle { cursor: grab; color: #888; font-size: 18px; margin-right: 5px; user-select: none; }
         
         /* 수정 가능한 타임스탬프 입력 상자 스타일 */
         .time-input { width: 75px !important; background: #222 !important; border: 1px solid #57abff !important; color: #57abff !important; font-weight: bold; text-align: center; border-radius: 4px; padding: 3px; }
@@ -49,7 +53,7 @@
         .input-group label { width: auto; font-size: 13px; font-weight: normal; margin-right: -3px; }
         .input-group input { width: 110px; background: #444; border: 1px solid #555; color: #fff; border-radius: 4px; padding: 3px; }
         
-        .delete-btn { background: #d9534f; color: white; border: none; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; position: absolute; right: 12px; top: 12px; }
+        .delete-btn { background: #d9534f; color: white; border: none; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; position: absolute; right: 12px; top: 12px; z-index: 2; }
         .delete-btn:hover { background: #c9302c; }
 
         .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -59,6 +63,10 @@
         .copy-btn:hover { background: #7cbeff; }
         .copy-end-btn { background: #ffc107; color: #000; border: none; border-radius: 6px; padding: 10px 15px; flex: 1; font-size: 15px; font-weight: bold; display: none; cursor: pointer; }
         .copy-end-btn:hover { background: #ffca2c; }
+        
+        .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .add-btn { background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; }
+        .add-btn:hover { background: #218838; }
     </style>
 </head>
 <body>
@@ -80,7 +88,7 @@
                 <button id="loadVideoBtn" style="padding: 4px 10px;">영상 띄우기</button>
             </div>
 
-            <!-- 이모티콘 설정 박스 (기본 접힘, 화살표로 펼치기 가능) -->
+            <!-- 이모티콘 설정 박스 -->
             <div class="config-box">
                 <div class="accordion-header" onclick="toggleAccordion()">
                     <span>⚙️ 이모티콘 설정 상세 보기 (시트 연동됨)</span>
@@ -124,7 +132,7 @@
             </div>
         </div>
 
-        <!-- 우측: 듀얼 유튜브 플레이어 패널 (상하 잘림 방지 최적화) -->
+        <!-- 우측: 듀얼 유튜브 플레이어 패널 -->
         <div class="right-panel">
             <div class="video-box">
                 <div class="video-label" id="labelStart">▶️ 시작 시간 확인</div>
@@ -146,6 +154,8 @@
         const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSHlAmiZLtkcb8g0Dc4V17sXHuzdGAJSqGhXIHWjxbvfYJqSjk8dYMpg5xo_G7k5ybNZFu3kiq9kLl/pub?gid=0&single=true&output=csv";
         const GRACE_PERIOD = 30; 
         let streamerDB = {};
+        
+        let dragSrcEl = null;
 
         function toggleAccordion() {
             const content = document.getElementById('accordionContent');
@@ -356,6 +366,132 @@
             else alert("유효한 유튜브 주소가 아닙니다.");
         }
 
+        // 새 빈 칸 추가 함수
+        function addEmptyItem() {
+            const listContainer = document.getElementById('songListContainer');
+            if (!listContainer) return;
+            
+            const div = createSongElement("0:00", "0:00", 999); // 인덱스는 곧 업데이트됨
+            listContainer.appendChild(div);
+            
+            document.getElementById('copyBtn').style.display = 'block';
+            document.getElementById('copyEndBtn').style.display = 'block';
+            
+            updateSongNumbers();
+        }
+
+        // 개별 타임스탬프 HTML 생성기
+        function createSongElement(startTimeText, endTimeText, index) {
+            const div = document.createElement('div');
+            div.className = 'timestamp-item';
+            div.setAttribute('draggable', 'true');
+            div.setAttribute('id', `song-item-${index}`);
+
+            // 드래그 이벤트 연결
+            div.addEventListener('dragstart', handleDragStart);
+            div.addEventListener('dragover', handleDragOver);
+            div.addEventListener('drop', handleDrop);
+            div.addEventListener('dragend', handleDragEnd);
+
+            const deleteBtn = `<button class="delete-btn" onclick="deleteSong(this)">❌ 삭제</button>`;
+
+            let timeHtml = `
+                <input type="text" class="time-input input-start-time" value="${startTimeText}">
+                <button class="play-btn play-start-btn">▶ 재생</button> ~ 
+                <input type="text" class="time-input input-end-time" value="${endTimeText}">
+                <button class="play-btn play-end-btn">▶ 재생</button>
+            `;
+
+            div.innerHTML = `
+                ${deleteBtn}
+                <div style="margin-bottom: 8px;">
+                    <span class="drag-handle">≡</span> 
+                    <span class="song-num-label">${String(index + 1).padStart(2, '0')}.</span> 
+                    ${timeHtml}
+                </div>
+                <div class="input-group">
+                    <label>가수:</label> <input type="text" class="input-singer">
+                    <label>곡명:</label> <input type="text" class="input-song">
+                </div>
+            `;
+            return div;
+        }
+
+        // 아이템 삭제 후 번호 재정렬
+        function deleteSong(btnElement) {
+            btnElement.closest('.timestamp-item').remove();
+            updateSongNumbers();
+            
+            const items = document.querySelectorAll('.timestamp-item');
+            if (items.length === 0) {
+                document.getElementById('copyBtn').style.display = 'none';
+                document.getElementById('copyEndBtn').style.display = 'none';
+            }
+        }
+
+        // 번호 및 인덱스 재정렬 로직
+        function updateSongNumbers() {
+            const items = document.querySelectorAll('.timestamp-item');
+            items.forEach((item, index) => {
+                item.setAttribute('id', `song-item-${index}`);
+                item.querySelector('.song-num-label').innerText = `${String(index + 1).padStart(2, '0')}.`;
+                
+                // 재생 버튼에 새 인덱스 맵핑
+                item.querySelector('.play-start-btn').setAttribute('onclick', `playStart(${index})`);
+                item.querySelector('.play-end-btn').setAttribute('onclick', `playEnd(${index})`);
+            });
+        }
+
+        // --- 드래그 앤 드롭 로직 시작 ---
+        function handleDragStart(e) {
+            dragSrcEl = this;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.innerHTML);
+            setTimeout(() => this.classList.add('dragging'), 0);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            const listContainer = document.getElementById('songListContainer');
+            const afterElement = getDragAfterElement(listContainer, e.clientY);
+            
+            if (afterElement == null) {
+                listContainer.appendChild(dragSrcEl);
+            } else {
+                listContainer.insertBefore(dragSrcEl, afterElement);
+            }
+            return false;
+        }
+
+        function handleDrop(e) {
+            e.stopPropagation();
+            return false;
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            dragSrcEl = null;
+            updateSongNumbers(); // 드래그 완료 시 순서 자동 갱신
+        }
+
+        // 마우스 Y 좌표를 계산하여 어느 위치로 들어갈지 결정
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.timestamp-item:not(.dragging)')];
+
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+        // --- 드래그 앤 드롭 로직 끝 ---
+
         function displayResults(songs) {
             const resultArea = document.getElementById('resultArea');
             const copyBtn = document.getElementById('copyBtn');
@@ -368,35 +504,26 @@
                 return;
             }
 
-            resultArea.innerHTML = "<div style='margin-bottom:15px;'>✅ <strong>노래 타임스탬프 검출 완료</strong></div>";
+            // 상단 헤더 및 추가 버튼 레이아웃
+            resultArea.innerHTML = `
+                <div class="header-flex">
+                    <div>✅ <strong>노래 타임스탬프 검출 완료</strong></div>
+                    <button class="add-btn" onclick="addEmptyItem()">➕ 생성</button>
+                </div>
+                <div id="songListContainer"></div>
+            `;
+            
+            const listContainer = document.getElementById('songListContainer');
 
             songs.forEach((song, i) => {
                 const startTimeText = formatTime(song.start);
                 const endTimeText = formatTime(song.end);
                 
-                const div = document.createElement('div');
-                div.className = 'timestamp-item';
-                div.setAttribute('id', `song-item-${i}`);
-
-                const deleteBtn = `<button class="delete-btn" onclick="document.getElementById('song-item-${i}').remove()">❌ 삭제</button>`;
-
-                let timeHtml = `
-                    <input type="text" class="time-input input-start-time" value="${startTimeText}">
-                    <button class="play-btn" onclick="playStart(${i})">▶ 재생</button> ~ 
-                    <input type="text" class="time-input input-end-time" value="${endTimeText}">
-                    <button class="play-btn" onclick="playEnd(${i})">▶ 재생</button>
-                `;
-
-                div.innerHTML = `
-                    ${deleteBtn}
-                    <div style="margin-bottom: 8px;">${String(i + 1).padStart(2, '0')}. ${timeHtml}</div>
-                    <div class="input-group">
-                        <label>가수:</label> <input type="text" class="input-singer">
-                        <label>곡명:</label> <input type="text" class="input-song">
-                    </div>
-                `;
-                resultArea.appendChild(div);
+                const div = createSongElement(startTimeText, endTimeText, i);
+                listContainer.appendChild(div);
             });
+            
+            updateSongNumbers();
             
             copyBtn.style.display = 'block';
             copyEndBtn.style.display = 'block';
