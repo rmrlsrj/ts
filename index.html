@@ -4,40 +4,47 @@
     <meta charset="UTF-8">
     <title>치지직 노래 타임스탬프 추출기</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 1500px; margin: 0 auto; }
+        body { font-family: sans-serif; padding: 20px; max-width: 1550px; margin: 0 auto; }
         
         /* 전체 좌우 분할 레이아웃 */
         .main-container { display: flex; gap: 30px; align-items: flex-start; }
         
         /* 좌측 제어 패널 */
-        .left-panel { flex: 1; min-width: 580px; max-width: 680px; }
+        .left-panel { flex: 1; min-width: 600px; max-width: 700px; }
         
         /* 우측 영상 패널 영역 (플레이어 크기 확대) */
-        .right-panel { flex: 1.2; display: flex; flex-direction: column; gap: 15px; position: sticky; top: 20px; }
+        .right-panel { flex: 1.3; display: flex; flex-direction: column; gap: 15px; position: sticky; top: 20px; }
         
         /* 개별 비디오 래퍼 (크기 확대 반영) */
         .video-box { width: 100%; display: flex; flex-direction: column; gap: 6px; }
-        .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 380px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 420px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         iframe { width: 100%; height: 100%; border: none; }
         .video-label { font-weight: bold; font-size: 15px; background: #eee; padding: 6px 10px; border-radius: 6px; }
         
         .config-box { border: 1px solid #ccc; padding: 15px; margin: 15px 0; border-radius: 8px; background: #f9f9f9; }
+        
+        /* 접기/펼치기 아코디언 스타일 */
+        .accordion-header { font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; padding: 5px 0; }
+        .accordion-content { display: none; margin-top: 15px; }
+        .accordion-content.show { display: block; }
+        
         .config-row { margin-bottom: 10px; }
         label { display: inline-block; width: 170px; font-weight: bold; }
         input[type="number"], input[type="text"] { width: 140px; padding: 4px; }
         select { padding: 5px; width: 150px; }
         button { padding: 10px 20px; font-weight: bold; cursor: pointer; }
-        #resultArea { margin-top: 20px; background: #222; color: #fff; padding: 15px; border-radius: 8px; min-height: 100px; max-height: 480px; overflow-y: auto; }
+        #resultArea { margin-top: 20px; background: #222; color: #fff; padding: 15px; border-radius: 8px; min-height: 100px; max-height: 650px; overflow-y: auto; }
         
         /* 타임스탬프 결과 아이템 스타일 */
         .timestamp-item { margin-bottom: 15px; background: #333; padding: 12px; border-radius: 6px; position: relative; }
-        .timestamp-link { color: #57abff; text-decoration: underline; cursor: pointer; font-weight: bold; font-size: 15px; }
-        .timestamp-link:hover { color: #9bcbfd; }
         
-        /* 수정 가능한 타임스탬프 입력 상자 스타일 (클릭 시 재생 기능 복구) */
-        .time-input { width: 75px !important; background: #222 !important; border: 1px solid #57abff !important; color: #57abff !important; font-weight: bold; text-align: center; border-radius: 4px; padding: 3px; cursor: pointer; }
-        .time-input:hover { background: #333 !important; }
+        /* 수정 가능한 타임스탬프 입력 상자 스타일 */
+        .time-input { width: 75px !important; background: #222 !important; border: 1px solid #57abff !important; color: #57abff !important; font-weight: bold; text-align: center; border-radius: 4px; padding: 3px; }
         
+        /* 독립 재생 버튼 스타일 */
+        .play-btn { background: #57abff; color: #000; border: none; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; margin-left: 4px; }
+        .play-btn:hover { background: #7cbeff; }
+
         .input-group { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
         .input-group label { width: auto; font-size: 13px; font-weight: normal; margin-right: -3px; }
         .input-group input { width: 110px; background: #444; border: 1px solid #555; color: #fff; border-radius: 4px; padding: 3px; }
@@ -73,21 +80,31 @@
                 <button id="loadVideoBtn" style="padding: 4px 10px;">영상 띄우기</button>
             </div>
 
+            <!-- 이모티콘 설정 박스 (기본 접힘, 화살표로 펼치기 가능) -->
             <div class="config-box">
-                <div class="grid-container">
-                    <div>
-                        <div class="config-row"><label>시작1:</label> <input type="text" id="uiStart1" disabled></div>
-                        <div class="config-row"><label>시작2:</label> <input type="text" id="uiStart2" disabled></div>
-                        <div class="config-row"><label>시작3:</label> <input type="text" id="uiStart3" disabled></div>
-                        <div class="config-row"><label>시작4:</label> <input type="text" id="uiStart4" disabled></div>
-                    </div>
-                    <div>
-                        <div class="config-row"><label>종료1:</label> <input type="text" id="uiEnd1" disabled></div>
-                        <div class="config-row"><label>종료2:</label> <input type="text" id="uiEnd2" disabled></div>
-                        <div class="config-row"><label>종료3:</label> <input type="text" id="uiEnd3" disabled></div>
+                <div class="accordion-header" onclick="toggleAccordion()">
+                    <span>⚙️ 이모티콘 설정 상세 보기 (시트 연동됨)</span>
+                    <span id="arrowIcon">▼</span>
+                </div>
+                <div class="accordion-content" id="accordionContent">
+                    <hr style="margin: 10px 0 15px 0;">
+                    <div class="grid-container">
+                        <div>
+                            <div class="config-row"><label>시작1:</label> <input type="text" id="uiStart1" disabled></div>
+                            <div class="config-row"><label>시작2:</label> <input type="text" id="uiStart2" disabled></div>
+                            <div class="config-row"><label>시작3:</label> <input type="text" id="uiStart3" disabled></div>
+                            <div class="config-row"><label>시작4:</label> <input type="text" id="uiStart4" disabled></div>
+                        </div>
+                        <div>
+                            <div class="config-row"><label>종료1:</label> <input type="text" id="uiEnd1" disabled></div>
+                            <div class="config-row"><label>종료2:</label> <input type="text" id="uiEnd2" disabled></div>
+                            <div class="config-row"><label>종료3:</label> <input type="text" id="uiEnd3" disabled></div>
+                        </div>
                     </div>
                 </div>
-                <hr>
+            </div>
+
+            <div class="config-box">
                 <div class="config-row"><label>시작 조건 (명/시간):</label> <input type="number" id="uiStartCond"></div>
                 <div class="config-row"><label>종료 조건 (명/시간):</label> <input type="number" id="uiEndCond"></div>
                 <div class="config-row"><label>탐지 유효 시간 (초):</label> <input type="number" id="uiWindowSec" value="15"></div>
@@ -107,7 +124,7 @@
             </div>
         </div>
 
-        <!-- 우측: 듀얼 유튜브 플레이어 패널 (크기 확대) -->
+        <!-- 우측: 듀얼 유튜브 플레이어 패널 -->
         <div class="right-panel">
             <div class="video-box">
                 <div class="video-label" id="labelStart">▶️ 시작 시간 확인</div>
@@ -129,6 +146,18 @@
         const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSHlAmiZLtkcb8g0Dc4V17sXHuzdGAJSqGhXIHWjxbvfYJqSjk8dYMpg5xo_G7k5ybNZFu3kiq9kLl/pub?gid=0&single=true&output=csv";
         const GRACE_PERIOD = 30; 
         let streamerDB = {};
+
+        // 아코디언 토글 함수
+        function toggleAccordion() {
+            const content = document.getElementById('accordionContent');
+            const arrow = document.getElementById('arrowIcon');
+            content.classList.toggle('show');
+            if (content.classList.contains('show')) {
+                arrow.textContent = '▲';
+            } else {
+                arrow.textContent = '▼';
+            }
+        }
 
         async function loadSheetData() {
             try {
@@ -352,10 +381,11 @@
 
                 const deleteBtn = `<button class="delete-btn" onclick="document.getElementById('song-item-${i}').remove()">❌ 삭제</button>`;
 
-                // 입력 상자를 클릭하거나 값을 수정하면 우측 플레이어가 즉시 해당 시간으로 재생되도록 연결
                 let timeHtml = `
-                    <input type="text" class="time-input input-start-time" value="${startTimeText}" onchange="updateVideoLinks(this, ${i})" onclick="triggerPlay(this, ${i}, 'start')" title="클릭하여 해당 시점 재생"> ~ 
-                    <input type="text" class="time-input input-end-time" value="${endTimeText}" onchange="updateVideoLinks(this, ${i})" onclick="triggerPlay(this, ${i}, 'end')" title="클릭하여 해당 시점 재생">
+                    <input type="text" class="time-input input-start-time" value="${startTimeText}">
+                    <button class="play-btn" onclick="playStart(${i})">▶ 재생</button> ~ 
+                    <input type="text" class="time-input input-end-time" value="${endTimeText}">
+                    <button class="play-btn" onclick="playEnd(${i})">▶ 재생</button>
                 `;
 
                 div.innerHTML = `
@@ -373,27 +403,18 @@
             copyEndBtn.style.display = 'block';
         }
 
-        // 입력 박스를 클릭했을 때 곧바로 우측 영상이 해당 시간으로 재생되도록 하는 함수
-        function triggerPlay(inputEl, index, type) {
-            const timeStr = inputEl.value;
+        function playStart(index) {
+            const item = document.getElementById(`song-item-${index}`);
+            const timeStr = item.querySelector('.input-start-time').value;
             const sec = parseTimeToSeconds(timeStr);
-            if (type === 'start') {
-                playVideoStart(sec, timeStr);
-            } else {
-                playVideoEnd(sec, timeStr);
-            }
+            playVideoStart(sec, timeStr);
         }
 
-        // 입력된 시간을 직접 수정(변경)했을 때 실행되는 함수
-        function updateVideoLinks(inputEl, index) {
-            const timeStr = inputEl.value;
+        function playEnd(index) {
+            const item = document.getElementById(`song-item-${index}`);
+            const timeStr = item.querySelector('.input-end-time').value;
             const sec = parseTimeToSeconds(timeStr);
-
-            if (inputEl.classList.contains('input-start-time')) {
-                playVideoStart(sec, timeStr);
-            } else {
-                playVideoEnd(sec, timeStr);
-            }
+            playVideoEnd(sec, timeStr);
         }
 
         document.getElementById('copyBtn').addEventListener('click', () => {
