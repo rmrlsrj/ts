@@ -23,11 +23,20 @@
         input[type="number"], input[type="text"] { width: 140px; padding: 4px; }
         select { padding: 5px; width: 150px; }
         button { padding: 10px 20px; font-weight: bold; cursor: pointer; }
-        #resultArea { margin-top: 20px; background: #222; color: #fff; padding: 15px; border-radius: 8px; min-height: 100px; max-height: 500px; overflow-y: auto; }
-        .timestamp-item { margin-bottom: 8px; font-size: 15px; }
-        .timestamp-link { color: #57abff; text-decoration: underline; cursor: pointer; font-weight: bold; }
+        #resultArea { margin-top: 20px; background: #222; color: #fff; padding: 15px; border-radius: 8px; min-height: 100px; max-height: 600px; overflow-y: auto; }
+        
+        /* 타임스탬프 결과 아이템 스타일 */
+        .timestamp-item { margin-bottom: 15px; background: #333; padding: 10px; border-radius: 6px; }
+        .timestamp-link { color: #57abff; text-decoration: underline; cursor: pointer; font-weight: bold; font-size: 16px; }
         .timestamp-link:hover { color: #9bcbfd; }
+        .input-group { display: flex; gap: 10px; margin-top: 8px; align-items: center; }
+        .input-group label { width: auto; font-size: 14px; font-weight: normal; margin-right: -5px; }
+        .input-group input { width: 120px; background: #444; border: 1px solid #555; color: #fff; border-radius: 4px; }
+        
         .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        #copyBtn { background: #57abff; color: #000; border: none; border-radius: 6px; padding: 10px 15px; width: 100%; margin-top: 15px; font-size: 16px; display: none; }
+        #copyBtn:hover { background: #7cbeff; }
     </style>
 </head>
 <body>
@@ -45,20 +54,18 @@
 
             <div class="config-row">
                 <label for="youtubeUrl">유튜브 영상 URL:</label>
-                <input type="text" id="youtubeUrl" placeholder="https://youtu.be/... (입력 시 우측에 로드됨)" style="width: 300px;">
+                <input type="text" id="youtubeUrl" placeholder="https://youtu.be/..." style="width: 300px;">
                 <button id="loadVideoBtn" style="padding: 4px 10px;">영상 띄우기</button>
             </div>
 
             <div class="config-box">
                 <div class="grid-container">
-                    <!-- 시작 이모티콘 4종 -->
                     <div>
                         <div class="config-row"><label>시작1:</label> <input type="text" id="uiStart1" disabled></div>
                         <div class="config-row"><label>시작2:</label> <input type="text" id="uiStart2" disabled></div>
                         <div class="config-row"><label>시작3:</label> <input type="text" id="uiStart3" disabled></div>
                         <div class="config-row"><label>시작4:</label> <input type="text" id="uiStart4" disabled></div>
                     </div>
-                    <!-- 종료 이모티콘 3종 -->
                     <div>
                         <div class="config-row"><label>종료1:</label> <input type="text" id="uiEnd1" disabled></div>
                         <div class="config-row"><label>종료2:</label> <input type="text" id="uiEnd2" disabled></div>
@@ -78,11 +85,13 @@
             </div>
 
             <div id="resultArea">스프레드시트를 연동하고 JSON 파일을 업로드하세요.</div>
+            <button id="copyBtn">📋 완성된 타임스탬프 텍스트 복사하기</button>
         </div>
 
         <!-- 우측: 유튜브 플레이어 패널 -->
         <div class="right-panel">
             <div class="video-wrapper">
+                <!-- 플레이어 1개만 로드되며, src만 갱신됩니다 -->
                 <iframe id="ytPlayer" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
             </div>
             <p style="color: #666; font-size: 14px; margin-top: 10px;">
@@ -96,7 +105,6 @@
         const GRACE_PERIOD = 30; 
         let streamerDB = {};
 
-        // 1. 구글 시트 연동
         async function loadSheetData() {
             try {
                 const response = await fetch(SHEET_CSV_URL);
@@ -146,12 +154,8 @@
             }
         });
 
-        // 영상 수동 로드 버튼
-        document.getElementById('loadVideoBtn').addEventListener('click', () => {
-            playVideo(0); // 0초부터 기본 로드
-        });
+        document.getElementById('loadVideoBtn').addEventListener('click', () => { playVideo(0); });
 
-        // 2. 분석 실행
         document.getElementById('processBtn').addEventListener('click', () => {
             const fileInput = document.getElementById('chatFileInput');
             if (fileInput.files.length === 0) return alert("채팅 JSON 파일을 선택해주세요.");
@@ -172,9 +176,8 @@
                 try {
                     const parsedData = JSON.parse(e.target.result);
                     let chatArray = [];
-                    if (Array.isArray(parsedData)) {
-                        chatArray = parsedData;
-                    } else {
+                    if (Array.isArray(parsedData)) chatArray = parsedData;
+                    else {
                         for (let key in parsedData) {
                             if (Array.isArray(parsedData[key])) {
                                 chatArray = parsedData[key];
@@ -182,13 +185,10 @@
                             }
                         }
                     }
-
                     if (chatArray.length === 0) return alert("채팅 배열 데이터를 찾을 수 없습니다.");
 
                     const songs = analyzeChat(chatArray, currentConfig);
                     displayResults(songs);
-                    
-                    // 분석 완료 후 URL이 있다면 영상 자동 로드
                     if(document.getElementById('youtubeUrl').value) playVideo(0);
                 } catch (error) {
                     alert("처리 중 에러 발생: " + error.message);
@@ -197,7 +197,6 @@
             reader.readAsText(fileInput.files[0]);
         });
 
-        // 3. 핵심 분석 로직
         function analyzeChat(chatData, config) {
             let state = 'IDLE'; 
             let currentSongStart = null;
@@ -209,7 +208,6 @@
             chatData.forEach(msg => {
                 const timeSec = Math.floor((msg.time || 0) / 1000);
                 const text = msg.message || ""; 
-
                 if (!text) return;
 
                 recentStarts = recentStarts.filter(t => timeSec - t <= config.windowSec);
@@ -227,8 +225,7 @@
                         currentSongStart = timeSec;
                         recentStarts = []; 
                     }
-                } 
-                else if (state === 'SINGING') {
+                } else if (state === 'SINGING') {
                     if (recentEnds.length >= config.endCond) {
                         const durationSec = timeSec - currentSongStart;
                         if (durationSec >= config.cooldown) { 
@@ -237,16 +234,14 @@
                             recentEnds = [];
                         }
                     }
-                } 
-                else if (state === 'END_PENDING') {
+                } else if (state === 'END_PENDING') {
                     const diffSec = timeSec - potentialEndTime;
                     if (recentStarts.length >= config.startCond && diffSec <= GRACE_PERIOD) {
                         songs.push({ start: currentSongStart, end: potentialEndTime });
                         currentSongStart = timeSec; 
                         state = 'SINGING';
                         recentStarts = [];
-                    } 
-                    else if (diffSec > GRACE_PERIOD) {
+                    } else if (diffSec > GRACE_PERIOD) {
                         songs.push({ start: currentSongStart, end: potentialEndTime });
                         state = 'IDLE';
                     }
@@ -257,50 +252,41 @@
             return songs;
         }
 
-        // 4. 결과 출력 포맷팅
+        // 시:분:초 포맷 변경 (1시간 미만이어도 강제로 00:00 형식을 안 만들고 H:MM:SS 출력)
         function formatTime(seconds) {
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
             const s = seconds % 60;
             const pad = num => String(num).padStart(2, '0');
-            return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+            return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
         }
 
-        // 5. 유튜브 임베드 재생 함수 (클릭 시 호출)
         function playVideo(seconds) {
             const ytUrl = document.getElementById('youtubeUrl').value;
             const iframe = document.getElementById('ytPlayer');
             
-            if (!ytUrl) {
-                alert("유튜브 영상 URL을 입력해주세요.");
-                return;
-            }
+            if (!ytUrl) return alert("유튜브 영상 URL을 입력해주세요.");
 
             let videoId = "";
-            if (ytUrl.includes("youtu.be/")) {
-                videoId = ytUrl.split("youtu.be/")[1].split("?")[0];
-            } else if (ytUrl.includes("watch?v=")) {
-                videoId = ytUrl.split("watch?v=")[1].split("&")[0];
-            }
+            if (ytUrl.includes("youtu.be/")) videoId = ytUrl.split("youtu.be/")[1].split("?")[0];
+            else if (ytUrl.includes("watch?v=")) videoId = ytUrl.split("watch?v=")[1].split("&")[0];
 
-            if (videoId) {
-                // start 파라미터를 추가하여 해당 초부터 자동 재생되도록 설정
-                iframe.src = `https://www.youtube.com/embed/${videoId}?start=${seconds}&autoplay=1`;
-            } else {
-                alert("유효한 유튜브 주소가 아닙니다. (youtu.be 또는 watch?v= 형식)");
-            }
+            if (videoId) iframe.src = `https://www.youtube.com/embed/${videoId}?start=${seconds}&autoplay=1`;
+            else alert("유효한 유튜브 주소가 아닙니다.");
         }
 
         function displayResults(songs) {
             const resultArea = document.getElementById('resultArea');
+            const copyBtn = document.getElementById('copyBtn');
             const ytUrl = document.getElementById('youtubeUrl').value;
 
             if (songs.length === 0) {
                 resultArea.innerText = "조건에 맞는 노래 구간이 검출되지 않았습니다.";
+                copyBtn.style.display = 'none';
                 return;
             }
 
-            resultArea.innerHTML = "✅ **노래 타임스탬프 검출 완료**<br><br>";
+            resultArea.innerHTML = "<div style='margin-bottom:15px;'>✅ <strong>노래 타임스탬프 검출 완료</strong></div>";
 
             songs.forEach((song, i) => {
                 const startTimeText = formatTime(song.start);
@@ -309,18 +295,57 @@
                 const div = document.createElement('div');
                 div.className = 'timestamp-item';
 
+                let timeHtml = "";
                 if (ytUrl) {
-                    // a 태그 대신 onclick 속성으로 playVideo 함수 호출
-                    div.innerHTML = `${String(i + 1).padStart(2, '0')}. 
-                        <a class="timestamp-link" onclick="playVideo(${song.start})">${startTimeText}</a> ~ 
-                        <a class="timestamp-link" onclick="playVideo(${song.end})">${endTimeText}</a>`;
+                    timeHtml = `<a class="timestamp-link" onclick="playVideo(${song.start})">${startTimeText}</a> ~ 
+                                <a class="timestamp-link" onclick="playVideo(${song.end})">${endTimeText}</a>`;
                 } else {
-                    div.innerHTML = `${String(i + 1).padStart(2, '0')}. ${startTimeText} ~ ${endTimeText}`;
+                    timeHtml = `<span style="color:#57abff; font-weight:bold; font-size:16px;">${startTimeText}</span> ~ <span style="font-size:16px;">${endTimeText}</span>`;
                 }
 
+                // 시작시간 + 종료시간 밑에 가수, 곡명 입력칸 추가
+                div.innerHTML = `
+                    <div style="margin-bottom: 8px;">${String(i + 1).padStart(2, '0')}. ${timeHtml}</div>
+                    <div class="input-group">
+                        <label>가수:</label> <input type="text" class="input-singer" data-time="${startTimeText}">
+                        <label>곡명:</label> <input type="text" class="input-song">
+                    </div>
+                `;
                 resultArea.appendChild(div);
             });
+            
+            // 검출 내역이 있을 때만 복사 버튼 표시
+            copyBtn.style.display = 'block';
         }
+
+        // 복사 버튼 클릭 이벤트
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            const items = document.querySelectorAll('.timestamp-item');
+            let resultText = "";
+
+            items.forEach(item => {
+                const time = item.querySelector('.input-singer').dataset.time;
+                const singer = item.querySelector('.input-singer').value.trim();
+                const song = item.querySelector('.input-song').value.trim();
+                
+                let line = time; // 기본적으로 시작 시간 기입
+
+                // 가수와 곡명이 둘 다 있으면 "가수 - 곡명" 연결, 하나만 있으면 있는 것만 추가
+                if (singer && song) {
+                    line += ` ${singer} - ${song}`;
+                } else if (singer || song) {
+                    line += ` ${singer}${song}`; 
+                }
+                
+                resultText += line + "\n";
+            });
+
+            navigator.clipboard.writeText(resultText).then(() => {
+                alert("📋 복사가 완료되었습니다!\n\n" + resultText);
+            }).catch(err => {
+                alert("복사 실패: " + err);
+            });
+        });
     </script>
 </body>
 </html>
