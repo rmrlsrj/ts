@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>치지직 노래 타임스탬프 추출기</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 1400px; margin: 0 auto; }
+        body { font-family: sans-serif; padding: 20px; max-width: 1500px; margin: 0 auto; }
         
         /* 전체 좌우 분할 레이아웃 */
         .main-container { display: flex; gap: 30px; align-items: flex-start; }
@@ -12,12 +12,12 @@
         /* 좌측 제어 패널 */
         .left-panel { flex: 1; min-width: 580px; max-width: 680px; }
         
-        /* 우측 영상 패널 영역 (세로 배치 및 화면 안에 들어오도록 크기 조정) */
-        .right-panel { flex: 1; display: flex; flex-direction: column; gap: 15px; position: sticky; top: 20px; }
+        /* 우측 영상 패널 영역 (플레이어 크기 확대) */
+        .right-panel { flex: 1.2; display: flex; flex-direction: column; gap: 15px; position: sticky; top: 20px; }
         
-        /* 개별 비디오 래퍼 (플레이어 크기 최적화) */
+        /* 개별 비디오 래퍼 (크기 확대 반영) */
         .video-box { width: 100%; display: flex; flex-direction: column; gap: 6px; }
-        .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 290px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 380px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         iframe { width: 100%; height: 100%; border: none; }
         .video-label { font-weight: bold; font-size: 15px; background: #eee; padding: 6px 10px; border-radius: 6px; }
         
@@ -34,8 +34,9 @@
         .timestamp-link { color: #57abff; text-decoration: underline; cursor: pointer; font-weight: bold; font-size: 15px; }
         .timestamp-link:hover { color: #9bcbfd; }
         
-        /* 수정 가능한 타임스탬프 입력 상자 스타일 */
-        .time-input { width: 75px !important; background: #222 !important; border: 1px solid #57abff !important; color: #57abff !important; font-weight: bold; text-align: center; border-radius: 4px; padding: 3px; }
+        /* 수정 가능한 타임스탬프 입력 상자 스타일 (클릭 시 재생 기능 복구) */
+        .time-input { width: 75px !important; background: #222 !important; border: 1px solid #57abff !important; color: #57abff !important; font-weight: bold; text-align: center; border-radius: 4px; padding: 3px; cursor: pointer; }
+        .time-input:hover { background: #333 !important; }
         
         .input-group { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
         .input-group label { width: auto; font-size: 13px; font-weight: normal; margin-right: -3px; }
@@ -106,7 +107,7 @@
             </div>
         </div>
 
-        <!-- 우측: 듀얼 유튜브 플레이어 패널 -->
+        <!-- 우측: 듀얼 유튜브 플레이어 패널 (크기 확대) -->
         <div class="right-panel">
             <div class="video-box">
                 <div class="video-label" id="labelStart">▶️ 시작 시간 확인</div>
@@ -289,7 +290,6 @@
             return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
         }
 
-        // 텍스트 시간 포맷("HH:MM:SS" 또는 "MM:SS")을 초(seconds) 숫자로 변환
         function parseTimeToSeconds(timeStr) {
             if (!timeStr) return 0;
             const parts = timeStr.trim().split(':').map(Number);
@@ -332,7 +332,6 @@
             const resultArea = document.getElementById('resultArea');
             const copyBtn = document.getElementById('copyBtn');
             const copyEndBtn = document.getElementById('copyEndBtn');
-            const ytUrl = document.getElementById('youtubeUrl').value;
 
             if (songs.length === 0) {
                 resultArea.innerText = "조건에 맞는 노래 구간이 검출되지 않았습니다.";
@@ -351,22 +350,13 @@
                 div.className = 'timestamp-item';
                 div.setAttribute('id', `song-item-${i}`);
 
-                // 삭제 버튼 추가
                 const deleteBtn = `<button class="delete-btn" onclick="document.getElementById('song-item-${i}').remove()">❌ 삭제</button>`;
 
-                let timeHtml = "";
-                if (ytUrl) {
-                    // 시작/종료 시간을 직접 입력할 수 있는 text input 폼으로 제공
-                    timeHtml = `
-                        <input type="text" class="time-input input-start-time" value="${startTimeText}" onchange="updateVideoLinks(this, ${i})"> ~ 
-                        <input type="text" class="time-input input-end-time" value="${endTimeText}" onchange="updateVideoLinks(this, ${i})">
-                    `;
-                } else {
-                    timeHtml = `
-                        <input type="text" class="time-input input-start-time" value="${startTimeText}"> ~ 
-                        <input type="text" class="time-input input-end-time" value="${endTimeText}">
-                    `;
-                }
+                // 입력 상자를 클릭하거나 값을 수정하면 우측 플레이어가 즉시 해당 시간으로 재생되도록 연결
+                let timeHtml = `
+                    <input type="text" class="time-input input-start-time" value="${startTimeText}" onchange="updateVideoLinks(this, ${i})" onclick="triggerPlay(this, ${i}, 'start')" title="클릭하여 해당 시점 재생"> ~ 
+                    <input type="text" class="time-input input-end-time" value="${endTimeText}" onchange="updateVideoLinks(this, ${i})" onclick="triggerPlay(this, ${i}, 'end')" title="클릭하여 해당 시점 재생">
+                `;
 
                 div.innerHTML = `
                     ${deleteBtn}
@@ -383,24 +373,29 @@
             copyEndBtn.style.display = 'block';
         }
 
-        // 입력창에서 시간을 직접 수정했을 때 플레이어 연동 함수 업데이트
-        function updateVideoLinks(inputEl, index) {
-            const item = document.getElementById(`song-item-${index}`);
-            const startTimeStr = item.querySelector('.input-start-time').value;
-            const endTimeStr = item.querySelector('.input-end-time').value;
-            
-            const startSec = parseTimeToSeconds(startTimeStr);
-            const endSec = parseTimeToSeconds(endTimeStr);
-
-            // 해당 input이 시작 시간인지 종료 시간인지 판별하여 구동
-            if (inputEl.classList.contains('input-start-time')) {
-                playVideoStart(startSec, startTimeStr);
+        // 입력 박스를 클릭했을 때 곧바로 우측 영상이 해당 시간으로 재생되도록 하는 함수
+        function triggerPlay(inputEl, index, type) {
+            const timeStr = inputEl.value;
+            const sec = parseTimeToSeconds(timeStr);
+            if (type === 'start') {
+                playVideoStart(sec, timeStr);
             } else {
-                playVideoEnd(endSec, endTimeStr);
+                playVideoEnd(sec, timeStr);
             }
         }
 
-        // 기존 복사 버튼 (시작시간 + 가수 - 곡명)
+        // 입력된 시간을 직접 수정(변경)했을 때 실행되는 함수
+        function updateVideoLinks(inputEl, index) {
+            const timeStr = inputEl.value;
+            const sec = parseTimeToSeconds(timeStr);
+
+            if (inputEl.classList.contains('input-start-time')) {
+                playVideoStart(sec, timeStr);
+            } else {
+                playVideoEnd(sec, timeStr);
+            }
+        }
+
         document.getElementById('copyBtn').addEventListener('click', () => {
             const items = document.querySelectorAll('.timestamp-item');
             let resultText = "";
@@ -427,7 +422,6 @@
             });
         });
 
-        // 추가된 복사 버튼 (종료 시간만 복사)
         document.getElementById('copyEndBtn').addEventListener('click', () => {
             const items = document.querySelectorAll('.timestamp-item');
             let resultText = "";
