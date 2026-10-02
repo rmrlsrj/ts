@@ -12,14 +12,14 @@
         /* 좌측 제어 패널 */
         .left-panel { flex: 1; min-width: 550px; max-width: 650px; }
         
-        /* 우측 영상 패널 영역 (플렉스로 영상 2개 세로 배치) */
-        .right-panel { flex: 1; display: flex; flex-direction: column; gap: 20px; position: sticky; top: 20px; }
+        /* 우측 영상 패널 영역 (세로 배치 및 화면 안에 들어오도록 크기 조정) */
+        .right-panel { flex: 1; display: flex; flex-direction: column; gap: 15px; position: sticky; top: 20px; }
         
-        /* 개별 비디오 래퍼 */
-        .video-box { width: 100%; display: flex; flex-direction: column; gap: 8px; }
-        .video-wrapper { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        /* 개별 비디오 래퍼 (플레이어 크기 최적화) */
+        .video-box { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+        .video-wrapper { width: 100%; aspect-ratio: 16/9; max-height: 310px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         iframe { width: 100%; height: 100%; border: none; }
-        .video-label { font-weight: bold; font-size: 16px; background: #eee; padding: 8px 12px; border-radius: 6px; }
+        .video-label { font-weight: bold; font-size: 15px; background: #eee; padding: 6px 10px; border-radius: 6px; }
         
         .config-box { border: 1px solid #ccc; padding: 15px; margin: 15px 0; border-radius: 8px; background: #f9f9f9; }
         .config-row { margin-bottom: 10px; }
@@ -27,7 +27,7 @@
         input[type="number"], input[type="text"] { width: 140px; padding: 4px; }
         select { padding: 5px; width: 150px; }
         button { padding: 10px 20px; font-weight: bold; cursor: pointer; }
-        #resultArea { margin-top: 20px; background: #222; color: #fff; padding: 15px; border-radius: 8px; min-height: 100px; max-height: 600px; overflow-y: auto; }
+        #resultArea { margin-top: 20px; background: #222; color: #fff; padding: 15px; border-radius: 8px; min-height: 100px; max-height: 500px; overflow-y: auto; }
         
         /* 타임스탬프 결과 아이템 스타일 */
         .timestamp-item { margin-bottom: 15px; background: #333; padding: 10px; border-radius: 6px; }
@@ -92,11 +92,11 @@
             <button id="copyBtn">📋 완성된 타임스탬프 텍스트 복사하기</button>
         </div>
 
-        <!-- 우측: 듀얼 유튜브 플레이어 패널 (세로 배치) -->
+        <!-- 우측: 듀얼 유튜브 플레이어 패널 (세로 배치 및 시간 표시 기능 추가) -->
         <div class="right-panel">
             <!-- 플레이어 1: 시작 지점 확인용 -->
             <div class="video-box">
-                <div class="video-label">▶️ 시작 시간 확인</div>
+                <div class="video-label" id="labelStart">▶️ 시작 시간 확인</div>
                 <div class="video-wrapper">
                     <iframe id="ytPlayerStart" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
                 </div>
@@ -104,7 +104,7 @@
             
             <!-- 플레이어 2: 종료 지점 확인용 -->
             <div class="video-box">
-                <div class="video-label">⏹️ 종료 시간 확인</div>
+                <div class="video-label" id="labelEnd">⏹️️ 종료 시간 확인</div>
                 <div class="video-wrapper">
                     <iframe id="ytPlayerEnd" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
                 </div>
@@ -168,8 +168,8 @@
 
         // 영상 수동 로드 버튼 (기본 0초 재생)
         document.getElementById('loadVideoBtn').addEventListener('click', () => { 
-            playVideoStart(0); 
-            playVideoEnd(0);
+            playVideoStart(0, "0:00"); 
+            playVideoEnd(0, "0:00");
         });
 
         document.getElementById('processBtn').addEventListener('click', () => {
@@ -208,8 +208,6 @@
 
                     const songs = analyzeChat(chatArray, currentConfig);
                     displayResults(songs);
-                    
-                    // 분석 직후 유튜브 자동 재생 로직 삭제 완료
                     
                 } catch (error) {
                     alert("처리 중 에러 발생: " + error.message);
@@ -288,20 +286,26 @@
             return "";
         }
 
-        function playVideoStart(seconds) {
+        // 시작 플레이어 제어 및 상단 라벨에 시간 반영
+        function playVideoStart(seconds, timeText) {
             const ytUrl = document.getElementById('youtubeUrl').value;
             const iframe = document.getElementById('ytPlayerStart');
             const videoId = getVideoId(ytUrl);
             
+            document.getElementById('labelStart').innerHTML = `▶️ 시작 시간 확인 - <span style="color: #0056b3;">${timeText}</span>`;
+
             if (videoId) iframe.src = `https://www.youtube.com/embed/${videoId}?start=${seconds}&autoplay=1`;
             else alert("유효한 유튜브 주소가 아닙니다.");
         }
 
-        function playVideoEnd(seconds) {
+        // 종료 플레이어 제어 및 하단 라벨에 시간 반영
+        function playVideoEnd(seconds, timeText) {
             const ytUrl = document.getElementById('youtubeUrl').value;
             const iframe = document.getElementById('ytPlayerEnd');
             const videoId = getVideoId(ytUrl);
             
+            document.getElementById('labelEnd').innerHTML = `⏹️ 종료 시간 확인 - <span style="color: #0056b3;">${timeText}</span>`;
+
             if (videoId) iframe.src = `https://www.youtube.com/embed/${videoId}?start=${seconds}&autoplay=1`;
             else alert("유효한 유튜브 주소가 아닙니다.");
         }
@@ -328,8 +332,9 @@
 
                 let timeHtml = "";
                 if (ytUrl) {
-                    timeHtml = `<a class="timestamp-link" onclick="playVideoStart(${song.start})">${startTimeText}</a> ~ 
-                                <a class="timestamp-link" onclick="playVideoEnd(${song.end})">${endTimeText}</a>`;
+                    // 클릭 시각 문자열을 인자로 함께 전달하여 라벨에 표기되도록 수정
+                    timeHtml = `<a class="timestamp-link" onclick="playVideoStart(${song.start}, '${startTimeText}')">${startTimeText}</a> ~ 
+                                <a class="timestamp-link" onclick="playVideoEnd(${song.end}, '${endTimeText}')">${endTimeText}</a>`;
                 } else {
                     timeHtml = `<span style="color:#57abff; font-weight:bold; font-size:16px;">${startTimeText}</span> ~ <span style="font-size:16px;">${endTimeText}</span>`;
                 }
