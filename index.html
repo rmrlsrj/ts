@@ -118,6 +118,7 @@
                 <div class="config-row"><label>종료 조건 (명/시간):</label> <input type="number" id="uiEndCond"></div>
                 <div class="config-row"><label>탐지 유효 시간 (초):</label> <input type="number" id="uiWindowSec" value="15"></div>
                 <div class="config-row"><label>최소 노래 길이 (초):</label> <input type="number" id="uiCooldown"></div>
+                <div class="config-row"><label>응원봉 유효 간격 (초):</label> <input type="number" id="uiStickGap" value="60"></div>
             </div>
 
             <div class="config-row">
@@ -154,6 +155,7 @@
     <script>
         const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSHlAmiZLtkcb8g0Dc4V17sXHuzdGAJSqGhXIHWjxbvfYJqSjk8dYMpg5xo_G7k5ybNZFu3kiq9kLl/pub?gid=0&single=true&output=csv";
         const GRACE_PERIOD = 30; 
+        const START_IGNORE_SEC = 10; // 종료 확정 직후, 늦게 도착한 응원봉을 새 곡 시작으로 오인하지 않기 위한 무시 시간
         let streamerDB = {};
         
         let dragSrcEl = null;
@@ -235,7 +237,8 @@
                 startCond: parseInt(document.getElementById('uiStartCond').value),
                 endCond: parseInt(document.getElementById('uiEndCond').value),
                 windowSec: parseInt(document.getElementById('uiWindowSec').value) || 15, 
-                cooldown: parseInt(document.getElementById('uiCooldown').value)
+                cooldown: parseInt(document.getElementById('uiCooldown').value),
+                stickGap: parseInt(document.getElementById('uiStickGap').value) || 60
             };
 
             const reader = new FileReader();
@@ -270,6 +273,8 @@
             let state = 'IDLE'; 
             let currentSongStart = null;
             let potentialEndTime = null;
+            let lastStickTime = null;      // 현재 곡에서 마지막으로 응원봉이 나온 시각
+            let ignoreStartUntil = 0;      // 이 시각 전의 응원봉은 시작 신호로 세지 않음
             let songs = [];
             let recentStarts = []; 
             let recentEnds = [];   
@@ -279,28 +284,44 @@
                 const text = msg.message || ""; 
                 if (!text) return;
 
+                // 응원봉이 stickGap초 넘게 끊기면 박수가 없어도 마지막 응원봉 시각에서 곡을 닫는다
+                if (state === 'SINGING' && timeSec - lastStickTime > config.stickGap) {
+                    if (lastStickTime - currentSongStart >= config.cooldown) {
+                        songs.push({ start: currentSongStart, end: lastStickTime });
+                    }
+                    state = 'IDLE';
+                    recentEnds = [];
+                }
+
                 recentStarts = recentStarts.filter(t => timeSec - t <= config.windowSec);
                 recentEnds = recentEnds.filter(t => timeSec - t <= config.windowSec);
 
                 const hasStart = config.startEmotes.some(emote => text.includes(emote));
                 const hasEnd = config.endEmotes.some(emote => text.includes(emote));
 
-                if (hasStart) recentStarts.push(timeSec);
+                // 종료 확정 직후 무시 구간에는 응원봉을 시작 신호로 세지 않음
+                const startIgnored = (state === 'END_PENDING' && timeSec < ignoreStartUntil);
+                if (hasStart && !startIgnored) recentStarts.push(timeSec);
                 if (hasEnd) recentEnds.push(timeSec);
 
                 if (state === 'IDLE') {
                     if (recentStarts.length >= config.startCond) {
                         state = 'SINGING';
                         currentSongStart = timeSec;
+                        lastStickTime = timeSec;
                         recentStarts = []; 
                     }
                 } else if (state === 'SINGING') {
-                    if (recentEnds.length >= config.endCond) {
+                    if (hasStart) lastStickTime = timeSec;
+                    // 박수는 직전 stickGap초 안에 응원봉이 있었을 때만 종료로 인정
+                    if (recentEnds.length >= config.endCond && timeSec - lastStickTime <= config.stickGap) {
                         const durationSec = timeSec - currentSongStart;
                         if (durationSec >= config.cooldown) { 
                             state = 'END_PENDING';
                             potentialEndTime = timeSec;
+                            ignoreStartUntil = timeSec + START_IGNORE_SEC;
                             recentEnds = [];
+                            recentStarts = [];
                         }
                     }
                 } else if (state === 'END_PENDING') {
@@ -308,6 +329,7 @@
                     if (recentStarts.length >= config.startCond && diffSec <= GRACE_PERIOD) {
                         songs.push({ start: currentSongStart, end: potentialEndTime });
                         currentSongStart = timeSec; 
+                        lastStickTime = timeSec;
                         state = 'SINGING';
                         recentStarts = [];
                     } else if (diffSec > GRACE_PERIOD) {
@@ -318,6 +340,9 @@
             });
 
             if (state === 'END_PENDING') songs.push({ start: currentSongStart, end: potentialEndTime });
+            else if (state === 'SINGING' && lastStickTime - currentSongStart >= config.cooldown) {
+                songs.push({ start: currentSongStart, end: lastStickTime });
+            }
             return songs;
         }
 
